@@ -1,6 +1,6 @@
 # 🐉 rde_mechanic
 
-[![Version](https://img.shields.io/badge/version-2.1.0-red?style=for-the-badge)](https://github.com/RedDragonElite/rde_mechanic)
+[![Version](https://img.shields.io/badge/version-2.2.0-red?style=for-the-badge)](https://github.com/RedDragonElite/rde_mechanic)
 [![License](https://img.shields.io/badge/license-RDE%20Black%20Flag-black?style=for-the-badge)](https://github.com/RedDragonElite/rde_mechanic/blob/main/LICENSE)
 [![FiveM](https://img.shields.io/badge/FiveM-Compatible-blue?style=for-the-badge)](https://fivem.net)
 [![ox_core](https://img.shields.io/badge/Framework-ox__core-blue?style=for-the-badge)](https://github.com/overextended/ox_core)
