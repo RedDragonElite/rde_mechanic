@@ -2,7 +2,8 @@
 #                                                                                 #
 #      .:: RED DRAGON ELITE (RDE)  -  BLACK FLAG SOURCE LICENSE v6.66 ::.         #
 #                                                                                 #
-#   ARCHITECT:  .:: RDE ⧌ Shin [△ ᛋᛅᚱᛒᛅᚾᛏᛋ ᛒᛁᛏᛅ ▽] ::. | https://rd-elite.com       #
+#   PROJECT:    RDE_MECHANIC v1.0.0 (VEHICLE MECHANIC & TUNER FOR FIVEM)          #
+#   ARCHITECT:  .:: RDE ⧌ Shin [△ ᛋᛅᚱᛒᛅᚾᛏᛋ ᛒᛁᛏᛅ ▽] ::. | https://rd-elite.com     #
 #   ORIGIN:     https://github.com/RedDragonElite                                 #
 #                                                                                 #
 #   WARNING: THIS CODE IS PROTECTED BY DIGITAL VOODOO AND PURE HATRED FOR LEAKERS #
@@ -28,8 +29,8 @@
 #      Don't be a skid. Respect the architecture.                                 #
 #                                                                                 #
 #   4. // THE CURSE OF THE COPY-PASTE                                             #
-#      This addon hooks into rde_props via StateBags and ox_target.               #
-#      If you rip it out of context without reading, it WILL break.               #
+#      This code uses GlobalState, proximity loading, and server-side validation. #
+#      If you just copy-paste without reading, it WILL break.                     #
 #      Don't come crying to my DMs. RTFM or learn to code.                        #
 #                                                                                 #
 #   --------------------------------------------------------------------------    #

@@ -22,6 +22,7 @@ local State = {
     ready            = false,
     -- Camera
     tuningCam        = nil,
+    camStopping      = false, -- FIX: guard against race condition during fade-out
     -- Preview
     previewOriginals = {},    -- [vehicleNetId] = snap table (for statebag-received previews)
     -- Wheel tracking
@@ -82,7 +83,10 @@ local function ReopenTuningMenu()
     if not State.tuningActive or not State.lastMenuCall then return end
     if not State.currentVehicle or not DoesEntityExist(State.currentVehicle) then return end
     CreateThread(function()
-        Wait(150)
+        -- FIX: 150ms war zu kurz – Kamera-Fade-out dauert bis zu fadeOutMs(600) + 100ms.
+        -- Wir warten 800ms damit camStopping sicher false ist bevor das Menü
+        -- (und damit SetupTuningCamera) erneut aufgerufen wird.
+        Wait(800)
         if State.tuningActive and State.lastMenuCall then
             State.lastMenuCall()
         end
@@ -101,6 +105,7 @@ local function StartOrbitCamera(vehicle)
     if not cfg or not cfg.enabled then return end
     if not DoesEntityExist(vehicle) then return end
     if State.tuningCam then return end  -- läuft bereits
+    if State.camStopping then return end -- FIX: fade-out noch aktiv, nicht neu starten
 
     local cam = CreateCam('DEFAULT_SCRIPTED_CAMERA', false)
     SetCamFov(cam, cfg.fov)
@@ -138,13 +143,16 @@ end
 
 local function StopOrbitCamera()
     if not State.tuningCam then return end
+    if State.camStopping then return end -- FIX: bereits am stoppen
     local cfg = Config.TuningCamera
     local fadeMs = (cfg and cfg.fadeOutMs) or 600
+    State.camStopping = true   -- FIX: blockiert StartOrbitCamera während fade-out
     RenderScriptCams(false, true, fadeMs, true, true)
     local cam = State.tuningCam
     State.tuningCam = nil
     SetTimeout(fadeMs + 100, function()
         pcall(function() DestroyCam(cam, false) end)
+        State.camStopping = false  -- FIX: jetzt darf eine neue Cam starten
     end)
 end
 
@@ -1025,6 +1033,7 @@ local function EndTuningSession()
     State.tuningActive = false
     State.menuOpen     = false
     State.lastMenuCall = nil
+    State.camStopping  = false  -- FIX: sicherstellen dass guard zurückgesetzt wird
 end
 
 -- ============================================

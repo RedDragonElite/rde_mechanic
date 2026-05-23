@@ -1,7 +1,7 @@
 -- ╔═══════════════════════════════════════════════════════════╗
 -- ║  RDE | Core | 🔺 Next-Gen Vehicle Mechanic & Tuner        ║
--- ║  by ᛋᛅᚱᛒᛅᚾᛁᛋ ᛒᛁᛞᛅ (SerpentsByte)                             ║
--- ║  FXManifest – v2.4 | Camera · Preview · Multiplayer Sync  ║
+-- ║  by ᛋᛅᚱᛒᛅᚾᛁᛋ ᛒᛁᛞᛅ (SerpentsByte)                            ║
+-- ║  FXManifest – v2.1 | Camera · Preview · Multiplayer Sync  ║
 -- ╚═══════════════════════════════════════════════════════════╝
 
 fx_version 'cerulean'
@@ -10,7 +10,7 @@ lua54 'yes'
 
 name        'rde_mechanic'
 author      'RDE | SerpentsByte'
-version     '2.4.0'
+version     '2.1.0'
 description 'Next-Gen Vehicle Mechanic & Tuner — Camera, Preview, GlobalState/StateBag Multiplayer Sync'
 
 shared_scripts {

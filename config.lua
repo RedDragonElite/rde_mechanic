@@ -1,6 +1,6 @@
 -- ╔════════════════════════════════════════════════════════════╗
 -- ║  RDE | Core | 🔺 Next-Gen Vehicle Mechanic & Tuner         ║
--- ║  CONFIG v2.4 – Camera · Preview · Multiplayer Sync         ║
+-- ║  CONFIG v2.4  – Camera · Preview · Multiplayer Sync         ║
 -- ╚════════════════════════════════════════════════════════════╝
 
 Config = {}
