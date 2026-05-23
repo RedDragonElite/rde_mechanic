@@ -1,7 +1,7 @@
 -- ╔════════════════════════════════════════════════════════════╗
 -- ║  RDE | Core | 🔺 NEXT-GEN MECHANIC & TUNER                 ║
 -- ║  CLIENT v2.4 – Camera · Preview · Multiplayer StateBag     ║
--- ║  by ᛋᛅᚱᛒᛅᚾᛁᛋ ᛒᛁᛞᛅ (SerpentsByte)                              ║
+-- ║  by ᛋᛅᚱᛒᛅᚾᛁᛋ ᛒᛁᛞᛅ (SerpentsByte)                             ║
 -- ╚════════════════════════════════════════════════════════════╝
 
 local RESOURCE_NAME = GetCurrentResourceName()
@@ -926,6 +926,24 @@ RegisterNetEvent('rde_mechanic:applyMod', function(netId, modType, modValue, whe
         SetVehicleMod(veh, tonumber(modType), tonumber(modValue), false)
     end
 
+    -- FIX: Wait one frame after applying the mod so GTA commits the mod
+    -- to the vehicle's internal state before we read it back via
+    -- lib.getVehicleProperties(). Without this wait, the snapshot can
+    -- still contain the OLD mod value → properties saved, but mod reverts
+    -- on next garage spawn because the stored value was stale.
+    Wait(100)
+
+    -- FIX: Trigger ox:vehicleModded state event so ox_vehicles marks the
+    -- vehicle dirty and includes the mod in its next persistence write.
+    -- Without this, ox_vehicles does not know the vehicle was modified and
+    -- may overwrite with its cached (pre-mod) properties on next spawn.
+    if Config.VehicleProperties and Config.VehicleProperties.useOxVehicle then
+        local evtName = Config.VehicleProperties.events and Config.VehicleProperties.events.mod
+        if evtName then
+            TriggerServerEvent(evtName, netId, modType, modValue)
+        end
+    end
+
     SaveVehicleProperties(veh)
     PlaySnd(Config.Sounds.purchase)
     PlayParticle(veh, 1200)
@@ -951,6 +969,13 @@ RegisterNetEvent('rde_mechanic:applyColor', function(netId, colorType, colorId)
     elseif colorType == 'wheel'       then SetVehicleExtraColours(veh, pearl, tonumber(colorId))  -- FIXED
     elseif colorType == 'interior'    then SetVehicleInteriorColour(veh, tonumber(colorId))
     elseif colorType == 'dashboard'   then SetVehicleDashboardColour(veh, tonumber(colorId))
+    end
+
+    Wait(100)  -- FIX: let GTA commit color before snapshot
+
+    if Config.VehicleProperties and Config.VehicleProperties.useOxVehicle then
+        local evtName = Config.VehicleProperties.events and Config.VehicleProperties.events.color
+        if evtName then TriggerServerEvent(evtName, netId, colorType, colorId) end
     end
 
     SaveVehicleProperties(veh)

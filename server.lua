@@ -1,7 +1,17 @@
 -- ╔════════════════════════════════════════════════════════════╗
--- ║  RDE | Core | 🔺 NEXT-GEN MECHANIC & TUNER                 ║
--- ║  SERVER v2.4 – GlobalState | StateBags | Repair Sync       ║
--- ║  by ᛋᛅᚱᛒᛅᚾᛁᛋ ᛒᛁᛞᛅ (SerpentsByte)                              ║
+-- ║  RDE | Core | 🔺 NEXT-GEN MECHANIC & TUNER               ║
+-- ║  SERVER v2.2 – GlobalState | StateBags | Repair Sync      ║
+-- ╠════════════════════════════════════════════════════════════╣
+-- ║  FIX LOG v2.2:                                             ║
+-- ║  [#1] SaveVehicleToDB: NetworkGetEntityFromNetworkId ist   ║
+-- ║       server-seitig unzuverlässig → plate aus properties   ║
+-- ║       (vom Client gesendet) wird jetzt direkt genutzt.     ║
+-- ║  [#2] Config.VehicleProperties.useOxVehicle = true wurde   ║
+-- ║       komplett ignoriert → Raw SQL wurde immer geschrieben. ║
+-- ║       Fix: ox_vehicles:setVehicleProperties() wird jetzt   ║
+-- ║       korrekt aufgerufen wenn useOxVehicle = true.         ║
+-- ║  [#3] Plate-Normalisierung (trim + uppercase) damit SQL-    ║
+-- ║       Fallback auch bei Leerzeichen-Plates matched.        ║
 -- ╚════════════════════════════════════════════════════════════╝
 
 local RESOURCE_NAME <const> = GetCurrentResourceName()
@@ -258,24 +268,57 @@ end
 -- 💾 VEHICLE PROPERTIES
 -- ============================================
 local function SaveVehicleToDB(vehicleNetId, properties)
-    local veh = NetworkGetEntityFromNetworkId(tonumber(vehicleNetId))
-    if not DoesEntityExist(veh) then return false end
+    -- FIX: NetworkGetEntityFromNetworkId is unreliable server-side — the entity
+    -- handle is only valid in the owning client's scope. We use the plate from
+    -- properties (sent by the client via lib.getVehicleProperties) instead.
+    --
+    -- FIX: Config.VehicleProperties.useOxVehicle = true was being ignored.
+    -- The code always fell through to raw SQL, which does NOT persist mods in
+    -- ox_vehicles garage setups. Now correctly calls ox_vehicles:setVehicleProperties.
 
-    local plate = GetVehicleNumberPlateText(veh)
-    if not plate or plate == '' then return false end
+    if not properties or type(properties) ~= 'table' then return false end
 
-    local ok, encoded = pcall(json.encode, properties)
-    if not ok or not encoded then return false end
+    local plate = properties.plate
+    if not plate or plate == '' then
+        -- fallback: try entity (may work if vehicle is in server scope)
+        local veh = NetworkGetEntityFromNetworkId(tonumber(vehicleNetId))
+        if DoesEntityExist(veh) then
+            plate = GetVehicleNumberPlateText(veh)
+        end
+    end
+    if not plate or plate == '' then
+        Log('SaveVehicleToDB: no plate for netId ' .. tostring(vehicleNetId), 'WARN')
+        return false
+    end
+
+    plate = string.upper(string.gsub(plate, '%s+', ''))  -- normalise: trim + uppercase
+
+    -- Primary path: ox_vehicles (correct for ox_core garage setups)
+    if Config.VehicleProperties and Config.VehicleProperties.useOxVehicle then
+        local ok, err = pcall(function()
+            exports.ox_vehicles:setVehicleProperties(plate, properties)
+        end)
+        if ok then
+            Log('ox_vehicles saved props: ' .. plate, 'SUCCESS')
+            return true
+        else
+            Log('ox_vehicles:setVehicleProperties failed (' .. tostring(err) .. ') falling back to SQL for ' .. plate, 'WARN')
+        end
+    end
+
+    -- Fallback: raw SQL (non-ox_vehicles garage frameworks)
+    local jsonOk, encoded = pcall(json.encode, properties)
+    if not jsonOk or not encoded then return false end
 
     local saved = pcall(function()
         MySQL.update.await([[
             UPDATE vehicles
             SET `data` = JSON_SET(COALESCE(`data`,'{}'), '$.properties', ?)
-            WHERE plate = ?
-        ]], { encoded, tostring(plate) })
+            WHERE UPPER(REPLACE(plate,' ','')) = ?
+        ]], { encoded, plate })
     end)
 
-    if saved then Log('Saved vehicle properties: ' .. plate, 'SUCCESS') end
+    if saved then Log('SQL saved vehicle properties: ' .. plate, 'SUCCESS') end
     return saved
 end
 
