@@ -919,6 +919,18 @@ end)
 -- ============================================
 -- 🎨 MOD / COLOR / NEON / EXTRA APPLY EVENTS
 -- ============================================
+-- FIX: When buyer is not the vehicle network owner, the server sends
+-- applyMod/applyColor/etc. only to the owner. The buyer then never gets
+-- ReopenTuningMenu/Notify/Sound/Particle callbacks.
+-- This event is sent exclusively to the buyer in that case.
+RegisterNetEvent('rde_mechanic:modAppliedBuyer', function(netId)
+    local veh = NetworkGetEntityFromNetworkId(tonumber(netId))
+    PlaySnd(Config.Sounds.purchase)
+    if veh and DoesEntityExist(veh) then PlayParticle(veh, 1200) end
+    Notify('success', L('purchase_success'), 'check-circle')
+    ReopenTuningMenu()
+end)
+
 RegisterNetEvent('rde_mechanic:applyMod', function(netId, modType, modValue, wheelType, isToggle)
     local veh = NetworkGetEntityFromNetworkId(tonumber(netId))
     if not DoesEntityExist(veh) then return end
@@ -953,10 +965,14 @@ RegisterNetEvent('rde_mechanic:applyMod', function(netId, modType, modValue, whe
     end
 
     SaveVehicleProperties(veh)
-    PlaySnd(Config.Sounds.purchase)
-    PlayParticle(veh, 1200)
-    Notify('success', L('purchase_success'), 'check-circle')
-    ReopenTuningMenu()
+    -- FIX: Only run buyer callbacks if this client is actually in a tuning session.
+    -- If this client is just the network owner (not the buyer), skip sound/notify/reopen.
+    if State.tuningActive then
+        PlaySnd(Config.Sounds.purchase)
+        PlayParticle(veh, 1200)
+        Notify('success', L('purchase_success'), 'check-circle')
+        ReopenTuningMenu()
+    end
 end)
 
 -- FIX: pearlescent and wheel colors were swapped.
@@ -987,8 +1003,10 @@ RegisterNetEvent('rde_mechanic:applyColor', function(netId, colorType, colorId)
     end
 
     SaveVehicleProperties(veh)
-    Notify('success', L('purchase_success'), 'palette')
-    ReopenTuningMenu()
+    if State.tuningActive then
+        Notify('success', L('purchase_success'), 'palette')
+        ReopenTuningMenu()
+    end
 end)
 
 RegisterNetEvent('rde_mechanic:applyNeon', function(netId, r, g, b)
@@ -997,15 +1015,15 @@ RegisterNetEvent('rde_mechanic:applyNeon', function(netId, r, g, b)
 
     if r == -1 then
         for i = 0, 3 do SetVehicleNeonLightEnabled(veh, i, false) end
-        Notify('success', L('disable_neon'), 'zap-off')
+        if State.tuningActive then Notify('success', L('disable_neon'), 'zap-off') end
     else
         SetVehicleNeonLightsColour(veh, tonumber(r), tonumber(g), tonumber(b))
         for i = 0, 3 do SetVehicleNeonLightEnabled(veh, i, true) end
-        Notify('success', L('purchase_success'), 'lightbulb')
+        if State.tuningActive then Notify('success', L('purchase_success'), 'lightbulb') end
     end
 
     SaveVehicleProperties(veh)
-    ReopenTuningMenu()
+    if State.tuningActive then ReopenTuningMenu() end
 end)
 
 RegisterNetEvent('rde_mechanic:applyExtra', function(netId, extraId, state)
@@ -1013,8 +1031,10 @@ RegisterNetEvent('rde_mechanic:applyExtra', function(netId, extraId, state)
     if not DoesEntityExist(veh) then return end
     SetVehicleExtra(veh, tonumber(extraId), not state)
     SaveVehicleProperties(veh)
-    Notify('success', L('purchase_success'), 'package')
-    ReopenTuningMenu()
+    if State.tuningActive then
+        Notify('success', L('purchase_success'), 'package')
+        ReopenTuningMenu()
+    end
 end)
 
 -- ============================================
