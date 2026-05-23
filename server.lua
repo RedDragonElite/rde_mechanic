@@ -493,12 +493,6 @@ RegisterNetEvent('rde_mechanic:purchaseMod', function(netId, modType, modValue, 
 
     local owner = DoesEntityExist(veh) and NetworkGetEntityOwner(veh) or src
     TriggerClientEvent('rde_mechanic:applyMod', owner, tonumber(netId), modType, modValue, wheelType, isToggle)
-    -- FIX: If buyer is not the vehicle owner, the owner applies the mod but
-    -- buyer never gets the ReopenTuningMenu/Notify/Sound callbacks.
-    -- Send a separate "buyer-only" event so their session stays in sync.
-    if owner ~= src then
-        TriggerClientEvent('rde_mechanic:modAppliedBuyer', src, tonumber(netId))
-    end
 
     Log(('Mod: %s | Type=%s Value=%s $%d'):format(GetPlayerName(src), tostring(modType), tostring(modValue), realPrice), 'INFO')
 
@@ -541,10 +535,6 @@ RegisterNetEvent('rde_mechanic:purchaseColor', function(netId, colorType, colorI
 
     local owner = DoesEntityExist(veh) and NetworkGetEntityOwner(veh) or src
     TriggerClientEvent('rde_mechanic:applyColor', owner, tonumber(netId), tostring(colorType), tonumber(colorId))
-    -- FIX: buyer needs callbacks even when not vehicle owner
-    if owner ~= src then
-        TriggerClientEvent('rde_mechanic:modAppliedBuyer', src, tonumber(netId))
-    end
 
     Log(('Color: %s | Type=%s ID=%d $%d'):format(GetPlayerName(src), tostring(colorType), tonumber(colorId), realPrice), 'INFO')
 end)
@@ -575,10 +565,6 @@ RegisterNetEvent('rde_mechanic:purchaseNeon', function(netId, r, g, b, price, vC
     local veh   = NetworkGetEntityFromNetworkId(tonumber(netId))
     local owner = DoesEntityExist(veh) and NetworkGetEntityOwner(veh) or src
     TriggerClientEvent('rde_mechanic:applyNeon', owner, tonumber(netId), tonumber(r), tonumber(g), tonumber(b))
-    -- FIX: buyer needs callbacks even when not vehicle owner
-    if owner ~= src then
-        TriggerClientEvent('rde_mechanic:modAppliedBuyer', src, tonumber(netId))
-    end
 
     Log(('Neon: %s | RGB(%d,%d,%d) $%d'):format(GetPlayerName(src), tonumber(r), tonumber(g), tonumber(b), realPrice), 'INFO')
 end)
@@ -609,10 +595,6 @@ RegisterNetEvent('rde_mechanic:purchaseExtra', function(netId, extraId, extraSta
     local veh   = NetworkGetEntityFromNetworkId(tonumber(netId))
     local owner = DoesEntityExist(veh) and NetworkGetEntityOwner(veh) or src
     TriggerClientEvent('rde_mechanic:applyExtra', owner, tonumber(netId), tonumber(extraId), extraState)
-    -- FIX: buyer needs callbacks even when not vehicle owner
-    if owner ~= src then
-        TriggerClientEvent('rde_mechanic:modAppliedBuyer', src, tonumber(netId))
-    end
 
     Log(('Extra: %s | ID=%d State=%s $%d'):format(GetPlayerName(src), tonumber(extraId), tostring(extraState), realPrice), 'INFO')
 end)

@@ -22,7 +22,6 @@ local State = {
     ready            = false,
     -- Camera
     tuningCam        = nil,
-    camStopping      = false, -- FIX: guard against race condition during fade-out
     -- Preview
     previewOriginals = {},    -- [vehicleNetId] = snap table (for statebag-received previews)
     -- Wheel tracking
@@ -83,10 +82,7 @@ local function ReopenTuningMenu()
     if not State.tuningActive or not State.lastMenuCall then return end
     if not State.currentVehicle or not DoesEntityExist(State.currentVehicle) then return end
     CreateThread(function()
-        -- FIX: 150ms war zu kurz – Kamera-Fade-out dauert bis zu fadeOutMs(600) + 100ms.
-        -- Wir warten 800ms damit camStopping sicher false ist bevor das Menü
-        -- (und damit SetupTuningCamera) erneut aufgerufen wird.
-        Wait(800)
+        Wait(150)
         if State.tuningActive and State.lastMenuCall then
             State.lastMenuCall()
         end
@@ -105,7 +101,6 @@ local function StartOrbitCamera(vehicle)
     if not cfg or not cfg.enabled then return end
     if not DoesEntityExist(vehicle) then return end
     if State.tuningCam then return end  -- läuft bereits
-    if State.camStopping then return end -- FIX: fade-out noch aktiv, nicht neu starten
 
     local cam = CreateCam('DEFAULT_SCRIPTED_CAMERA', false)
     SetCamFov(cam, cfg.fov)
@@ -143,16 +138,13 @@ end
 
 local function StopOrbitCamera()
     if not State.tuningCam then return end
-    if State.camStopping then return end -- FIX: bereits am stoppen
     local cfg = Config.TuningCamera
     local fadeMs = (cfg and cfg.fadeOutMs) or 600
-    State.camStopping = true   -- FIX: blockiert StartOrbitCamera während fade-out
     RenderScriptCams(false, true, fadeMs, true, true)
     local cam = State.tuningCam
     State.tuningCam = nil
     SetTimeout(fadeMs + 100, function()
         pcall(function() DestroyCam(cam, false) end)
-        State.camStopping = false  -- FIX: jetzt darf eine neue Cam starten
     end)
 end
 
@@ -398,11 +390,18 @@ AddStateBagChangeHandler(Config.StateBags.previewMod, nil, function(bagName, key
     local myServId = GetPlayerServerId(PlayerId())
 
     if value and value ~= false then
-        -- Store original for this vehicle (used if we need to restore on clear)
-        State.previewOriginals[netId] = value.snap
-
-        -- Don't re-apply locally if WE are the one previewing (we already applied it)
+        -- FIX (race condition): The BUYER must NEVER store the snap here.
+        -- They already have their own `snap` local in the buy/cancel flow,
+        -- and they apply the preview themselves via ApplyPreviewMod.
+        -- If we store it, the clear-handler below would re-trigger a Restore
+        -- AFTER the buy-confirm — racing against applyMod's SetVehicleMod →
+        -- SaveVehicleProperties would persist the pre-purchase (original) state
+        -- and the mod silently reverts on next garage spawn.
+        --
+        -- Only non-buyer spectators need the snap (so they can restore on cancel).
         if value.previewBy == myServId then return end
+
+        State.previewOriginals[netId] = value.snap
 
         SetVehicleModKit(entity, 0)
         if value.isColor then
@@ -919,21 +918,16 @@ end)
 -- ============================================
 -- 🎨 MOD / COLOR / NEON / EXTRA APPLY EVENTS
 -- ============================================
--- FIX: When buyer is not the vehicle network owner, the server sends
--- applyMod/applyColor/etc. only to the owner. The buyer then never gets
--- ReopenTuningMenu/Notify/Sound/Particle callbacks.
--- This event is sent exclusively to the buyer in that case.
-RegisterNetEvent('rde_mechanic:modAppliedBuyer', function(netId)
-    local veh = NetworkGetEntityFromNetworkId(tonumber(netId))
-    PlaySnd(Config.Sounds.purchase)
-    if veh and DoesEntityExist(veh) then PlayParticle(veh, 1200) end
-    Notify('success', L('purchase_success'), 'check-circle')
-    ReopenTuningMenu()
-end)
-
 RegisterNetEvent('rde_mechanic:applyMod', function(netId, modType, modValue, wheelType, isToggle)
     local veh = NetworkGetEntityFromNetworkId(tonumber(netId))
     if not DoesEntityExist(veh) then return end
+
+    -- FIX (race condition guard): Wipe any pending preview-restore for this
+    -- vehicle BEFORE we touch the mod. If a StateBag-clear handler fires
+    -- between SetVehicleMod and SaveVehicleProperties below (e.g. because
+    -- the orbit cam thread yields every frame and reorders replication),
+    -- we don't want RestoreFromCapture rolling the mod back to the original.
+    State.previewOriginals[tonumber(netId)] = nil
 
     SetVehicleModKit(veh, 0)
     if wheelType then
@@ -965,14 +959,10 @@ RegisterNetEvent('rde_mechanic:applyMod', function(netId, modType, modValue, whe
     end
 
     SaveVehicleProperties(veh)
-    -- FIX: Only run buyer callbacks if this client is actually in a tuning session.
-    -- If this client is just the network owner (not the buyer), skip sound/notify/reopen.
-    if State.tuningActive then
-        PlaySnd(Config.Sounds.purchase)
-        PlayParticle(veh, 1200)
-        Notify('success', L('purchase_success'), 'check-circle')
-        ReopenTuningMenu()
-    end
+    PlaySnd(Config.Sounds.purchase)
+    PlayParticle(veh, 1200)
+    Notify('success', L('purchase_success'), 'check-circle')
+    ReopenTuningMenu()
 end)
 
 -- FIX: pearlescent and wheel colors were swapped.
@@ -981,6 +971,9 @@ end)
 RegisterNetEvent('rde_mechanic:applyColor', function(netId, colorType, colorId)
     local veh = NetworkGetEntityFromNetworkId(tonumber(netId))
     if not DoesEntityExist(veh) then return end
+
+    -- FIX (race condition guard): same as applyMod — see comment there.
+    State.previewOriginals[tonumber(netId)] = nil
 
     local p, s         = GetVehicleColours(veh)
     local pearl, wheel = GetVehicleExtraColours(veh)  -- (pearlescentColor, wheelColor)
@@ -1003,38 +996,41 @@ RegisterNetEvent('rde_mechanic:applyColor', function(netId, colorType, colorId)
     end
 
     SaveVehicleProperties(veh)
-    if State.tuningActive then
-        Notify('success', L('purchase_success'), 'palette')
-        ReopenTuningMenu()
-    end
+    Notify('success', L('purchase_success'), 'palette')
+    ReopenTuningMenu()
 end)
 
 RegisterNetEvent('rde_mechanic:applyNeon', function(netId, r, g, b)
     local veh = NetworkGetEntityFromNetworkId(tonumber(netId))
     if not DoesEntityExist(veh) then return end
 
+    -- FIX (race condition guard): same as applyMod — see comment there.
+    State.previewOriginals[tonumber(netId)] = nil
+
     if r == -1 then
         for i = 0, 3 do SetVehicleNeonLightEnabled(veh, i, false) end
-        if State.tuningActive then Notify('success', L('disable_neon'), 'zap-off') end
+        Notify('success', L('disable_neon'), 'zap-off')
     else
         SetVehicleNeonLightsColour(veh, tonumber(r), tonumber(g), tonumber(b))
         for i = 0, 3 do SetVehicleNeonLightEnabled(veh, i, true) end
-        if State.tuningActive then Notify('success', L('purchase_success'), 'lightbulb') end
+        Notify('success', L('purchase_success'), 'lightbulb')
     end
 
     SaveVehicleProperties(veh)
-    if State.tuningActive then ReopenTuningMenu() end
+    ReopenTuningMenu()
 end)
 
 RegisterNetEvent('rde_mechanic:applyExtra', function(netId, extraId, state)
     local veh = NetworkGetEntityFromNetworkId(tonumber(netId))
     if not DoesEntityExist(veh) then return end
+
+    -- FIX (race condition guard): same as applyMod — see comment there.
+    State.previewOriginals[tonumber(netId)] = nil
+
     SetVehicleExtra(veh, tonumber(extraId), not state)
     SaveVehicleProperties(veh)
-    if State.tuningActive then
-        Notify('success', L('purchase_success'), 'package')
-        ReopenTuningMenu()
-    end
+    Notify('success', L('purchase_success'), 'package')
+    ReopenTuningMenu()
 end)
 
 -- ============================================
@@ -1053,7 +1049,6 @@ local function EndTuningSession()
     State.tuningActive = false
     State.menuOpen     = false
     State.lastMenuCall = nil
-    State.camStopping  = false  -- FIX: sicherstellen dass guard zurückgesetzt wird
 end
 
 -- ============================================
